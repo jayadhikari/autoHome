@@ -77,8 +77,8 @@ int LIGHTS_OFF_TIMEOUT = 5;
 boolean humanPresent=false;
 #endif
 
-const char* ssid = "Android";
-const char* password = "@YAHO1714#@@";
+const char* ssid = "Yugoslavia";
+const char* password = "trintin";
 
 const int RF_OSC = 200;
 

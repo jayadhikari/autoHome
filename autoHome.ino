@@ -1,4 +1,4 @@
-/*
+ /*
 Released under Creative Commons Attribution 4.0
 by bitluni 2016
 https://creativecommons.org/licenses/by/4.0/
@@ -19,8 +19,6 @@ I'll be pleased if you'd do it by sharing http://youtube.com/bitlunislab
 #include <IRremoteESP8266.h>
 #include <IRrecv.h>
 #include <IRsend.h>
-//#include "DHT11.h"
-
 #include "IRTxRx.h"
 #include "button.h"
 #include "FauXMo.h"
@@ -31,20 +29,21 @@ I'll be pleased if you'd do it by sharing http://youtube.com/bitlunislab
 #include "myEeprom.h"
 
 #include "RF.h"
-//#include "DHT.h"
 //#define PIR_FEATURE
 
-#define LED                             2
+
 #define MAX_DEVICE_TO_SAVE (5)
 
 #define DEVICE_ON (1)
 #define DEVICE_OFF (0)
 
 const int RECV_PIN = D5;
-
+const int IR_SEND_PIN = D3;
+const int LED_PIN = D2;
+const int RF_DATA_PIN = D4;
 
 IRrecv irrecv(RECV_PIN, CAPTURE_BUFFER_SIZE, TIMEOUT, true);
-IRsend irsend(D3);  // An IR LED is controlled by GPIO pin 4 (D3)
+IRsend irsend(IR_SEND_PIN);  // An IR LED is controlled by GPIO pin 4 (D3)
 /***NTP init***/
 WiFiUDP ntpUDP;//for NTP
 NTPClient timeClient(ntpUDP);
@@ -56,11 +55,15 @@ extern boolean buttonFlag;
 
 static int volumeLevel=0;
 static long unsigned int checkTime =0,firstCommandTime=0,sysSecTick=0,SONYCommandTime=0;
-
+ char SSID_USER[20];
 boolean sclearnMode = 0,sendIRMusicCommandflag=0,sendIRTvCommandflag=0,sendIRCommandflag=0;
 boolean sendMusicFunctionCommandflag=0,MusicVolumeflag=0,MusicVolumeDownflag=0;
 boolean sendSONYCommands;//sony IR commands require send 3 IR commands for the same function
-
+ char Password[20];  
+DevFlags flag;
+DevState state;
+unsigned char SSIDCount;
+unsigned char PassCount;
 _EEPaddress controlCmd[1];
 //_EEPaddress EEPROMLoc ;
 
@@ -71,22 +74,24 @@ _savedTime detectTime,checkTimeout;
 
 
 boolean triggeredLightOn=false;
+String request;
+boolean getPassword=0;
 
 #ifdef PIR_FEATURE  
 int LIGHTS_OFF_TIMEOUT = 5;
 boolean humanPresent=false;
 #endif
 
-const char* ssid = "Yugoslavia";
-const char* password = "trintin";
+  char* ssid;
+  char* password;
 
 const int RF_OSC = 200;
 
-int mainLight = 4;
+//int mainLight = 4;
 int channelNum =0;
 int timeNTP=0;
 
-typedef enum deviceNumber{BULB,TUBE,BED_BULB, BED_TUBE,FAN,NONE};
+typedef enum deviceNumber{BULB,TUBE,BED_BULB, BED_TUBE,FAN,FANCY_LIGHT,NONE};
 
 deviceNumber deviceID = NONE;
 
@@ -122,8 +127,7 @@ void handleRoot() {
   message += "<input type='button' value='on' onclick='send(1)'><input type='button' value='off' onclick='send(0)'>";
   message += "</form><br>";
   message += "<iframe id='response' name='response' style='display:none' onload='loaded()'></iframe>URL constucted and called: <a href='#' id='target'>...</a><br><br>";
- // message += "have fun -<a </body></html>";
-  //message += "have fun -<a /*href='http://youtube.com/bitlunislab'>bitluni*/</a></body></html>";
+ 
   server.send(200, "text/html", message);
 }
 
@@ -184,32 +188,8 @@ void handleRf()
 	int id = getArgValue("id");
 	int ch = getArgValue("channel");
 	int on = getArgValue("on");
-	/*String out = "rf D";
-	out += pin;
-	out += " ";
-	out += t;
-	out += " ";
-	out += id;
-	out += " ";
-	out += ch;
-	out += " ";
-	out += on;*/
-	pinMode(pinNumbers[pin], OUTPUT);
- 
- if(pin == 4)
- {
-    /* mainLight = pin;
-     stCh.channelID = id;
-     channelNum = 1 << (ch + 1);  
-
-      triggeredLightOn = false;//if operated through app/web then reenable local control through sensor
-     
-     writeEEPROM((unsigned char)mainLight,ADDR_MAIN_LIGHT); 
-     writeWordToEEPROM(stCh.channelID);      
-     
-     writeEEPROM((unsigned char)channelNum,addrChannelNum);  
-     */
- }
+	
+  Serial.println("got app command..");
 	for(int i = 0; i < 5; i++)
 		rfWriteCode(pinNumbers[pin], t, id, (1 << (ch + 1)) | (on > 0? 1: 0));
     
@@ -220,13 +200,13 @@ void DrawingRoomBulb(void)
 {
      //http://192.168.0.103/rf?D=4&t=200&id=28013&on=1&channel=0  
    for(int i = 0; i < 5; i++)
-      rfWriteCode(D4, 200, 28013, (1 << (0 + 1)) | (1 > 0? 1: 0));
+      rfWriteCode(D4, 200, 28019, (1 << (0 + 1)) | (1 > 0? 1: 0));
 }
 void DrawingRoomTube(void)
 {
      //http://192.168.0.103/rf?D=4&t=200&id=28013&on=1&channel=0  
    for(int i = 0; i < 5; i++)
-      rfWriteCode(D4, 200, 28013, (1 << (1 + 1)) | (1 > 0? 1: 0));
+      rfWriteCode(D4, 200, 28019, (1 << (1 + 1)) | (1 > 0? 1: 0));
 }
 void BedRoomBulb(void)
 {
@@ -246,6 +226,11 @@ void fan(void)
    for(int i = 0; i < 5; i++)
       rfWriteCode(D4, 200, 28015, (1 << (2 + 1)) | (1 > 0? 1: 0));
 }
+void fancyLight(void)
+{
+    for(int i = 0; i < 5; i++)
+      rfWriteCode(D4, 200, 28017, (1 << (2 + 1)) | (1 > 0? 1: 0));
+}
 void AllLights(void)
 {
   switch(deviceID)
@@ -253,19 +238,28 @@ void AllLights(void)
     case BULB:
           DrawingRoomBulb();
           deviceID = TUBE;
-           
+          Serial.println("bulb..");           
           break;
     case TUBE:      
           DrawingRoomTube();
           deviceID = BED_BULB;
+          Serial.println("tube..");
           break;
     case BED_BULB:
           BedRoomBulb();
           deviceID = BED_TUBE;
+          Serial.println("bed bulb..");
           break;
     case BED_TUBE:
           BedRoomTube();
+          deviceID = FANCY_LIGHT;
+          Serial.println("bed tube..");
+          
+          break;
+    case FANCY_LIGHT:
+          fancyLight();
           deviceID = NONE;
+          Serial.println("fancy light..");
           break;
   }
 }
@@ -304,14 +298,16 @@ void checkDeviceSchedule(int timeNTP)
 
 void setup(void)
 {
+  //pinMode(mainLight, OUTPUT);//main light
+  pinMode(LED_PIN, OUTPUT);//LED light
+  pinMode(IR_SEND_PIN, OUTPUT);//IR Send
+  pinMode(RF_DATA_PIN, OUTPUT);//RF Send
   //ESP.wdtDisable();
   //ESP.wdtEnable(WDTO_8S);
   //irsend.begin();
-  Serial.begin(115200); 
-  //DHTInit();   
- // DHT dht(DHTPIN, DHTTYPE);
- // dht.begin(); 
-  
+  flag.Byte =0;
+  state.Byte=0;
+  Serial.begin(115200);    
   eepromSetup();  
   initTime();
   initIR();//init IR send recieve  
@@ -320,21 +316,39 @@ void setup(void)
   #ifdef PIR_FEATURE
   setupPIRSensor();
   #endif
-  
- readSavedValues(); 
+  //dummyRead();
+  readSavedValues(); 
+
+  ssid = SSID_USER;//
+  password = Password;//
     
-  pinMode(mainLight, OUTPUT);//main light
-  pinMode(D2, OUTPUT);//LED light
-  //pinMode(D3, OUTPUT);//IR Send
+  
    
-  WiFi.begin(ssid, password);
-  Serial.println("..");
+  //WiFi.begin(ssid, password);
+  WiFi.begin(SSID_USER, Password);
+  Serial.println("");
   
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) 
   {
     delay(500);
     Serial.print(".");
+    while(Serial.available()) 
+    {
+  
+      request = Serial.readString();// read the incoming data as string
+      Serial.print("request= ");
+      Serial.println(request);
+      if(request == "new password")
+      {
+        getPassword=1;
+        Serial.println("request match..");
+        
+      }
+      
+    }
+    if(getPassword)
+    break;
   }
   if(mdns.begin("mySmartHome",WiFi.localIP()))
   {
@@ -369,9 +383,9 @@ void loop(void)
 {
   //updateTime();
  // ESP.wdtFeed();
-  digitalWrite(D2, LOW);
+  digitalWrite(LED_PIN, LOW);
   server.handleClient();
-  digitalWrite(D2, HIGH);
+  digitalWrite(LED_PIN, HIGH);
 
   handleFauxmp();
 
@@ -379,8 +393,11 @@ void loop(void)
   checkTime = millis();
 
   if((checkTime - sysSecTick)  > 2000)
-  {//execute IR commands after hey are recieved from alexa
-
+  {//execute IR commands after they are recieved from alexa
+    if(flag.Byte)
+    {
+      checkActionTobePerformed();
+    }
     handleIRCommandSend();        
     SONYCommandTime = sysSecTick = checkTime;
     timeClient.update();
@@ -398,7 +415,7 @@ void loop(void)
   }
 
   if((checkTime - firstCommandTime) > 2000)
-  {  
+  {        
       AllLights();//handle all devices switching in this
       firstCommandTime = checkTime;
   }
@@ -412,6 +429,11 @@ void loop(void)
         Serial.println("Learn mode Exited"); 
     }    
     
+  }
+  if(getPassword)
+  {
+    getPassword=0;
+    getCredentials();
   }
 
 }

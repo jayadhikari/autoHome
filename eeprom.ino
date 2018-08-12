@@ -6,52 +6,143 @@
  * turned off and may be retrieved later by another sketch.
  */
 
-#include "myEeprom.h"
 #include <EEPROM.h>
 
-#define EEPROM_MAX_SIZE   (512)
-#define IR_COMMAND_SIZE   (100)
-#define LOC_COMMAND_0     (0)
-#define LOC_COMMAND_1     (LOC_COMMAND_0 + IR_COMMAND_SIZE)
+const int addrSSIDCountLoc =0;
+const int addrPassCountLoc =1;
+const int addrSSID =2;
+const int addrPassword =22;
+
+char incomingByte;
+boolean saveSSID=0, savePass=0;
+int hashCount=0;
 
 void eepromSetup(void)
 {
   EEPROM.begin(512);
 }
-
-void readSavedValues(void)
+void dummyRead()
 {
-  /*mainLight = readEEPROM(memory.addrMainLight);
-  stCh.un.IDHigh = readEEPROM(memory.addrChannelIDH);
-  stCh.un.IDLow = readEEPROM(memory.addrChannelIDL);
-  channelNum = readEEPROM(memory.addrChannelNum);
-  */
-  //memset(&controlCmd,0x00,sizeof(controlCmd));
- 
-  for(uint16_t loc=0;loc<120;loc++)
+      for(int i=0;i<40;i++)
+      Serial.print(readEEPROM(i));
+}
+void readSavedValues()
+{
+  int count,count1;
+
+  SSIDCount = readEEPROM(addrSSIDCountLoc);
+  PassCount = readEEPROM(addrPassCountLoc);
+  Serial.print("\n\rSSIDCount: ");
+  Serial.println(SSIDCount,10);  
+  Serial.print("PassCount: ");
+  Serial.println(PassCount,10);  
+  
+  if((SSIDCount > 1 && SSIDCount <= 20) && (PassCount <=20 && PassCount > 1 ))
   {
-      controlCmd[0].addrLoc[loc] = readEEPROM(loc);
-     // yield();  // Feed the WDT (again)
+    
+    for(count=addrSSID,count1=0; count < (addrSSID+SSIDCount); count++,count1++)
+    {   
+      SSID_USER[count1] = readEEPROM(count);
+    }
+    SSID_USER[count1] = '\0';
+
+    for(count=addrPassword,count1=0; count < (addrPassword+PassCount);  count++,count1++)
+    {    
+      Password[count1] = readEEPROM(count);
+    }
+    Password[count1] = '\0';
+
+    
+    
+    Serial.print("SSID: ");  
+    Serial.println(SSID_USER); 
+    
+    
+    Serial.print("password: ");         
+    Serial.println(Password); 
+    
   }
-  //yield();  // Feed the WDT (again)
-  Serial.println("\r\nEEPROM Values:");
-  for(int loc=0;loc<EEPROM_MAX_SIZE;loc++)
+  else  
   {
-      Serial.print(controlCmd[0].addrLoc[loc]);
-      
-      Serial.print(",");
-      if(loc%100 == 0)
-      Serial.print("\r\n");
+    Serial.println("SSID and Password not found..\n");   
+
+    getCredentials();
   }
-  yield();  // Feed the WDT (again)
-  /*Serial.println("Read EEPROM values: "); 
-  Serial.println(mainLight);
-  Serial.println(stCh.channelID);
-  Serial.println(channelNum);
-    */  
+}
+void getCredentials()
+{
+  boolean credentialsFound=0;
+  Serial.println("please enter *SSID_NAME*PASSWORD*"); 
+    while(!credentialsFound)
+    {
+          if (Serial.available() > 0) 
+          {
+              incomingByte = Serial.read(); // read the incoming byte:   
+              if(incomingByte == '*')
+              {
+                  hashCount++;
+                  if(!saveSSID && (hashCount == 1))
+                  {
+                     SSIDCount=0;
+                     saveSSID=1;
+                  }
+                  else if(hashCount == 2)
+                  {
+                      SSID_USER[SSIDCount] = '\0';
+                      savePass =1;
+                      PassCount=0;
+                      saveSSID =0;
+                  }
+                  else if(hashCount == 3)
+                  {
+                    Password[PassCount] = '\0';
+                    saveSSID = 0;
+                    savePass = 0;
+                    hashCount =0;
+                    
+                    
+                    Serial.print("SSID count: ");
+                    Serial.println(SSIDCount,10);
+                    Serial.print("SSID: ");          
+                    Serial.println(SSID_USER);
+                    Serial.print("password count: ");  
+                    Serial.println(PassCount,10);                        
+                    Serial.print("password: ");          
+                    Serial.println(Password);
+
+                    EEPROM.begin(512);
+                    writeEEPROM(SSIDCount,addrSSIDCountLoc);       
+                    writeEEPROM(PassCount,addrPassCountLoc);  
+
+                    EEPROM.begin(512);
+                    for(int i=0; i< SSIDCount;i++)
+                      writeEEPROM(SSID_USER[i],addrSSID+i);  
+
+                    EEPROM.begin(512);
+                    for(int i=0; i< PassCount;i++) 
+                      writeEEPROM(Password[i],addrPassword+i);                    
+                    
+                      credentialsFound=1;  
+                  }
+              } 
+              else
+              {
+                    if(saveSSID)
+                    {
+                        SSID_USER[SSIDCount++] = incomingByte;
+                    }  
+                    else if(savePass)
+                    {
+                        Password[PassCount++] = incomingByte;
+                    }
+              }      
+                     
+          }  
+    }
+  
   
 }
-void writeEEPROM(uint8_t data,uint16_t address)
+void writeEEPROM(unsigned char data,int address)
 {
   // write the value to the appropriate byte of the EEPROM.
   // these values will remain there when the board is
@@ -63,23 +154,12 @@ void writeEEPROM(uint8_t data,uint16_t address)
   delay(100);
 }
 
-uint8_t readEEPROM(uint16_t address)
+char readEEPROM(int address)
 {
   // write the value to the appropriate byte of the EEPROM.
   // these values will remain there when the board is
   // turned off.
+  delay(100);
   return(EEPROM.read(address)) ;
-}
-void writeWordToEEPROM(uint16_t cmdWord,uint16_t address)
-{
-     writeEEPROM((cmdWord >> 8),address);  
-     writeEEPROM((cmdWord & 0xFF),address+1);  
-}     
-void saveCommand(_EEPaddress *ptrCmd)
-{
-    for(int count=0;count<ptrCmd->commandIR.count;count++)
-    {
-        writeWordToEEPROM(ptrCmd->commandIR.duration[count],(LOC_COMMAND_0+(count*2)));//for each adrees sent the api write to two locations , so multiple of 2
-    }
   
-}    
+}

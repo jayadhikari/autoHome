@@ -1,8 +1,10 @@
 #include "fauxmoESP.h"
-#include "credentials.h"
+
 #include "FauXMo.h"
 
 fauxmoESP fauxmo;
+
+bool tState;
 extern decode_results results;
 
 void handleFauxmp(void)
@@ -17,7 +19,9 @@ void addSmartDevices(void)
     fauxmo.addDevice("bed tube"); // You can add more devices
     fauxmo.addDevice("bed bulb");
     fauxmo.addDevice("fan");
+    fauxmo.addDevice("fancy light"); // You can add more devices
     fauxmo.addDevice("lights"); // You can add more devices
+    
     fauxmo.addDevice("learn mode"); // You can add more devices
     fauxmo.addDevice("speaker"); // You can add more devices
     fauxmo.addDevice("TV"); // You can add more devices
@@ -25,6 +29,7 @@ void addSmartDevices(void)
     fauxmo.addDevice("function"); // You can add more devices
     fauxmo.addDevice("volume up"); // You can add more devices
     fauxmo.addDevice("volume down"); // You can add more devices
+    
 }
 
 void fauxmoInit(void)
@@ -38,37 +43,52 @@ void fauxmoInit(void)
     {
         Serial.printf("[MAIN] Device #%d (%s) state: %s\n", device_id, device_name, state ? "ON" : "OFF");
         //digitalWrite(LED, !state);
+        tState =  state;      
         switch(device_id)
         {
-            case 0:DrawingRoomTube();break;
-            case 1:DrawingRoomBulb();break;   
-            case 2:BedRoomTube();break;
-            case 3:BedRoomBulb();break;
-            case 4:fan();break;   
-            case 5:deviceID =BULB;            
+            case 0:flag.bits.DrawingRoomTubeFlag =1;             
+                //    state.bits.DrawingRoomTubeFlag = state;
+            break;
+            case 1:flag.bits.DrawingRoomBulbFlag =1; 
+                 // state.bits.DrawingRoomBulbFlag = state;
+            break;   
+            case 2:flag.bits.BedRoomTubeFlag=1; 
+                //  state.bits.BedRoomTubeFlag = state;
+            break;
+            case 3:flag.bits.BedRoomBulbFlag=1; 
+                //  state.bits.BedRoomBulbFlag = state;
+            break;
+            case 4:flag.bits.fanFlag=1;
+               //   state.bits.fanFlag = state;
+            break;   
+            case 5:flag.bits.fancyLightflag =1;
+                //   state.bits.fancyLightflag = state;
+            break;
+            case 6:deviceID =BULB;            
             firstCommandTime = millis();break;           
-            case 6: sclearnMode=1;
+            case 7: sclearnMode=1;
                     enableIRRx();
                     memset(&results,0,sizeof(results));
             break;
-            case 7: 
+            case 8: 
                     sendIRMusicCommandflag =1;
             break;
-            case 8: 
+            case 9: 
                     sendIRTvCommandflag =1;
             break;
-            case 9:
+            case 10:
                     sendIRCommandflag =1;
             break;
-            case 10:
+            case 11:
                     sendMusicFunctionCommandflag =1;
             break;
-            case 11:
+            case 12:
                     MusicVolumeflag =1;
             break;
-            case 12:
+            case 13:
                     MusicVolumeDownflag =1;
             break;
+            
         }
         
     });
@@ -76,7 +96,28 @@ void fauxmoInit(void)
     // Callback to retrieve current state (for GetBinaryState queries)
     fauxmo.onGetState([](unsigned char device_id, const char * device_name) 
     {
-        return digitalRead(LED) == HIGH;
+      return (tState);
+        //return (state.Byte & (1 << device_id));
     });
 
+}
+void checkActionTobePerformed(void)
+{
+  if(flag.bits.DrawingRoomTubeFlag)
+  {
+    DrawingRoomBulb();    
+  }
+  if(flag.bits.DrawingRoomBulbFlag)
+    DrawingRoomTube();
+  if(flag.bits.BedRoomTubeFlag)
+    BedRoomTube();
+  if(flag.bits.BedRoomBulbFlag)
+    BedRoomBulb();
+  if(flag.bits.fanFlag)
+    fan();
+  if(flag.bits.fancyLightflag)
+    fancyLight(); 
+ 
+
+  flag.Byte=0x00;
 }

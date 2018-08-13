@@ -53,8 +53,10 @@ MDNSResponder mdns;
 
 extern boolean buttonFlag;
 
-boolean updateDeviceStatus=0;
+boolean updateDeviceStatusOnGroupCommand=0;
+boolean updateDeviceStatusOnWebCommand = 0 ;
 boolean restoreDevicestate=0;
+boolean cmdReqDevState = 0;
 
 static int volumeLevel=0;
 static long unsigned int checkTime =0,firstCommandTime=0,sysSecTick=0,SONYCommandTime=0;
@@ -164,10 +166,11 @@ void handleTime()
 {
   int id = getArgValue("id");
   int ch = getArgValue("channel");
-  int on = getArgValue("on");
+  
   int timeTo = getArgValue("timeTo");
   int timeFrom = getArgValue("timeFr");
-
+  cmdReqDevState = getArgValue("on");
+ 
   if(deviceCount < MAX_DEVICE_TO_SAVE)
   {
     infoSchedule[deviceCount].devId = id;
@@ -197,8 +200,8 @@ void handleRf()
    
 	int id = getArgValue("id");
 	int ch = getArgValue("channel");
-	int on = getArgValue("on");
-	
+	 cmdReqDevState = getArgValue("on");
+	 
   Serial.println("got app command..");
   if(id == 28019 && ch == 0)
     flagAllCommand.bits.DrawingRoomBulbFlag =1;
@@ -212,10 +215,10 @@ void handleRf()
     flagAllCommand.bits.fancyLightflag =1;
 
   if(flagAllCommand.Byte)
-    updateDeviceStatus = 1;//device state changed update this   
+    updateDeviceStatusOnWebCommand = 1;//device state changed update this   
   
 	for(int i = 0; i < 5; i++)
-		rfWriteCode(pinNumbers[pin], t, id, (1 << (ch + 1)) | (on > 0? 1: 0));
+		rfWriteCode(pinNumbers[pin], t, id, (1 << (ch + 1)) | (cmdReqDevState > 0? 1: 0));
     
 	server.send(2, "text/plain", "OK");	
 }
@@ -293,7 +296,7 @@ void AllLights(void)
 
           Serial.print("flagAllCommand.Byte = ");
           Serial.println(flagAllCommand.Byte,HEX);          
-          updateDeviceStatus =1;
+          updateDeviceStatusOnGroupCommand =1;
           
           break;
   }
@@ -492,22 +495,26 @@ void loop(void)
     getPassword=0;
     getCredentials();
   }
-  if(updateDeviceStatus)
-  {
-        updateDeviceStatus = 0;     
-    
+  if(updateDeviceStatusOnGroupCommand || updateDeviceStatusOnWebCommand)
+  { 
         Serial.print("\n\rflagAllCommand.Byte = ");
         Serial.println(flagAllCommand.Byte, HEX);
         Serial.print("\n\rstate.Byte = ");
         Serial.println(state.Byte, HEX);
-
-        state.Byte = getNewStatus(state.Byte,flagAllCommand.Byte);
+        if(updateDeviceStatusOnGroupCommand)
+          state.Byte = getNewStatus(state.Byte,flagAllCommand.Byte,ECHO,0);
+        else
+          state.Byte = getNewStatus(state.Byte,flagAllCommand.Byte,WEB_APP,cmdReqDevState);
+          
         state.Byte = state.Byte & FAN_MASK_BYTE;//turn off fan bit, handle fan separately when required
         flagAllCommand.Byte = 0;
+        
         Serial.print("\n\rnew device status = ");
         Serial.println(state.Byte, HEX);
         saveDeviceStatus(state.Byte); 
-       
+        
+        updateDeviceStatusOnGroupCommand = 0;
+        updateDeviceStatusOnWebCommand = 0;
   }
 
 }

@@ -36,11 +36,12 @@ typedef union deviceState
   
 }DevState;
 
+typedef enum CMD_SOURCE {WEB_APP,ECHO};
 
 void handleFauxmp(void);
 void fauxmoInit(void);
 void addSmartDevices(void);
 void checkActionTobePerformed(void);
-unsigned char getNewStatus(unsigned char Byte1,unsigned char Byte2);
+unsigned char getNewStatus(unsigned char Byte1,unsigned char Byte2,CMD_SOURCE);
 
 #endif

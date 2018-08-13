@@ -109,9 +109,17 @@ void fauxmoInit(void)
 
 }
 
-unsigned char getNewStatus(unsigned char Byte1 , unsigned char Byte2)
-{
-    if(tState == DEVICE_OFF)
+unsigned char getNewStatus(unsigned char Byte1 , unsigned char Byte2,CMD_SOURCE cmdSource,boolean req)
+{//to differentiate between ON and OFF commands. Fauxmo handles the commands from echo. APP and web commands has to 
+  //send a state bit to indicate if the command is for ON or OFF
+  boolean stateReq;
+  
+  if(cmdSource == WEB_APP)
+    stateReq = req;
+  else
+    stateReq = tState;   
+     
+    if( stateReq == DEVICE_OFF)
     {
         Byte1 = Byte1 & (~Byte2);
     }
@@ -157,7 +165,7 @@ void checkActionTobePerformed(void)
     Serial.print("state.Byte = ");
     Serial.println(state.Byte, HEX);
 
-    state.Byte = getNewStatus(state.Byte,flag.Byte);
+    state.Byte = getNewStatus(state.Byte,flag.Byte,ECHO,0);
     
     Serial.print("\n\rnew device status = ");
     Serial.println(state.Byte, HEX);

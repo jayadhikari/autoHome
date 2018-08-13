@@ -7,6 +7,9 @@ fauxmoESP fauxmo;
 bool tState;
 extern decode_results results;
 
+#define DEVICE_ON   (1)
+#define DEVICE_OFF   (0)
+
 void handleFauxmp(void)
 {
   fauxmo.handle();
@@ -61,11 +64,15 @@ void fauxmoInit(void)
             case 4:flag.bits.fanFlag=1;
                //   state.bits.fanFlag = state;
             break;   
+            
             case 5:flag.bits.fancyLightflag =1;
                 //   state.bits.fancyLightflag = state;
             break;
+            
             case 6:deviceID =BULB;            
-            firstCommandTime = millis();break;           
+            firstCommandTime = millis();
+            break;           
+            
             case 7: sclearnMode=1;
                     enableIRRx();
                     memset(&results,0,sizeof(results));
@@ -101,23 +108,110 @@ void fauxmoInit(void)
     });
 
 }
-void checkActionTobePerformed(void)
-{
-  if(flag.bits.DrawingRoomTubeFlag)
-  {
-    DrawingRoomBulb();    
-  }
-  if(flag.bits.DrawingRoomBulbFlag)
-    DrawingRoomTube();
-  if(flag.bits.BedRoomTubeFlag)
-    BedRoomTube();
-  if(flag.bits.BedRoomBulbFlag)
-    BedRoomBulb();
-  if(flag.bits.fanFlag)
-    fan();
-  if(flag.bits.fancyLightflag)
-    fancyLight(); 
- 
 
-  flag.Byte=0x00;
+unsigned char getNewStatus(unsigned char Byte1 , unsigned char Byte2)
+{
+    if(tState == DEVICE_OFF)
+    {
+        Byte1 = Byte1 & (~Byte2);
+    }
+    else
+    {
+      Byte1 = Byte1 |  Byte2;
+    } 
+    return Byte1;
 }
+void checkActionTobePerformed(void)
+{//this routine will execute for a single device at a time, like when asking echo to operate a device  
+
+  
+    if(flag.bits.DrawingRoomTubeFlag )
+    {    
+      DrawingRoomBulb();        
+    }
+    else if(flag.bits.DrawingRoomBulbFlag)
+    {    
+      DrawingRoomTube();
+    }
+    else if(flag.bits.BedRoomTubeFlag )
+    {    
+      BedRoomTube();
+    }
+    else if(flag.bits.BedRoomBulbFlag )
+    {
+      BedRoomBulb();
+    }
+    else if(flag.bits.fanFlag)
+    {
+      fan();
+    }
+    else if(flag.bits.fancyLightflag )
+    {
+      fancyLight();
+    }  
+  
+  
+             
+    Serial.print("\n\rflag.Byte = ");
+    Serial.println(flag.Byte, HEX);
+    Serial.print("state.Byte = ");
+    Serial.println(state.Byte, HEX);
+
+    state.Byte = getNewStatus(state.Byte,flag.Byte);
+    
+    Serial.print("\n\rnew device status = ");
+    Serial.println(state.Byte, HEX);
+    saveDeviceStatus(state.Byte);      
+      
+ 
+    flag.Byte = 0;
+  
+}
+void restoreState(void)
+{
+  if(flag.bits.DrawingRoomTubeFlag && !state.bits.DrawingRoomTubeFlag)
+  {
+    state.bits.DrawingRoomTubeFlag = 1;
+    DrawingRoomBulb();        
+  }
+  else if(flag.bits.DrawingRoomBulbFlag && !state.bits.DrawingRoomBulbFlag)
+  {
+    state.bits.DrawingRoomBulbFlag = 1;
+    DrawingRoomTube();
+  }
+  else if(flag.bits.BedRoomTubeFlag && !state.bits.BedRoomTubeFlag)
+  {
+    state.bits.BedRoomTubeFlag = 1;
+    BedRoomTube();
+  }
+  else if(flag.bits.BedRoomBulbFlag && !state.bits.BedRoomBulbFlag)
+  {
+    state.bits.BedRoomBulbFlag = 1;
+    BedRoomBulb();
+  }
+  else if(flag.bits.fanFlag && !state.bits.fanFlag)
+  {
+    state.bits.fanFlag = 1;
+    fan();
+  }
+  else if(flag.bits.fancyLightflag && !state.bits.fancyLightflag)
+  {
+    state.bits.fancyLightflag = 1;
+    fancyLight();
+  }
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

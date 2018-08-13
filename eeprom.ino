@@ -8,10 +8,13 @@
 
 #include <EEPROM.h>
 
-const int addrSSIDCountLoc =0;
-const int addrPassCountLoc =1;
-const int addrSSID =2;
-const int addrPassword =22;
+#define ADDR_SSID_COUNT_LOC       0                       //eeprom address for storing length of SSID string
+#define ADDR_PSWD_COUNT_LOC       1                      //eeprom address for storing length of password string
+#define ADDR_SSID                 2                      //starting address of SSID memory
+#define ADDR_PASSWORD             22                      //starting address of password memory
+#define MAX_PASSWORD_LEN          20                      //starting address of password memory
+#define ADDR_DEVICE_STATE         (ADDR_PASSWORD+MAX_PASSWORD_LEN)
+
 
 char incomingByte;
 boolean saveSSID=0, savePass=0;
@@ -29,9 +32,9 @@ void dummyRead()
 void readSavedValues()
 {
   int count,count1;
-
-  SSIDCount = readEEPROM(addrSSIDCountLoc);
-  PassCount = readEEPROM(addrPassCountLoc);
+  
+  SSIDCount = readEEPROM(ADDR_SSID_COUNT_LOC);
+  PassCount = readEEPROM(ADDR_PSWD_COUNT_LOC);
   Serial.print("\n\rSSIDCount: ");
   Serial.println(SSIDCount,10);  
   Serial.print("PassCount: ");
@@ -40,13 +43,13 @@ void readSavedValues()
   if((SSIDCount > 1 && SSIDCount <= 20) && (PassCount <=20 && PassCount > 1 ))
   {
     
-    for(count=addrSSID,count1=0; count < (addrSSID+SSIDCount); count++,count1++)
+    for(count=ADDR_SSID,count1=0; count < (ADDR_SSID+SSIDCount); count++,count1++)
     {   
       SSID_USER[count1] = readEEPROM(count);
     }
     SSID_USER[count1] = '\0';
 
-    for(count=addrPassword,count1=0; count < (addrPassword+PassCount);  count++,count1++)
+    for(count=ADDR_PASSWORD,count1=0; count < (ADDR_PASSWORD+PassCount);  count++,count1++)
     {    
       Password[count1] = readEEPROM(count);
     }
@@ -72,7 +75,7 @@ void readSavedValues()
 void getCredentials()
 {
   boolean credentialsFound=0;
-  Serial.println("please enter *SSID_NAME*PASSWORD*"); 
+  Serial.println("please enter *SSID_NAME*PASSWORD*"  ); 
     while(!credentialsFound)
     {
           if (Serial.available() > 0) 
@@ -111,16 +114,16 @@ void getCredentials()
                     Serial.println(Password);
 
                     EEPROM.begin(512);
-                    writeEEPROM(SSIDCount,addrSSIDCountLoc);       
-                    writeEEPROM(PassCount,addrPassCountLoc);  
+                    writeEEPROM(SSIDCount,ADDR_SSID_COUNT_LOC);       
+                    writeEEPROM(PassCount,ADDR_PSWD_COUNT_LOC);  
 
                     EEPROM.begin(512);
                     for(int i=0; i< SSIDCount;i++)
-                      writeEEPROM(SSID_USER[i],addrSSID+i);  
+                      writeEEPROM(SSID_USER[i],ADDR_SSID+i);  
 
                     EEPROM.begin(512);
                     for(int i=0; i< PassCount;i++) 
-                      writeEEPROM(Password[i],addrPassword+i);                    
+                      writeEEPROM(Password[i],ADDR_PASSWORD+i);                    
                     
                       credentialsFound=1;  
                   }
@@ -142,8 +145,18 @@ void getCredentials()
   
   
 }
+void saveDeviceStatus(unsigned char Byte)
+{
+  EEPROM.begin(512);
+  writeEEPROM(Byte,ADDR_DEVICE_STATE);  
+}
+unsigned char getDeviceStatus(void)
+{
+   return  readEEPROM(ADDR_DEVICE_STATE);
+}
 void writeEEPROM(unsigned char data,int address)
 {
+  
   // write the value to the appropriate byte of the EEPROM.
   // these values will remain there when the board is
   // turned off.

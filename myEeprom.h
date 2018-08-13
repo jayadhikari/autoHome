@@ -18,5 +18,5 @@ typedef union
 }stChanID;
 
 
-
+void saveDeviceStatus(unsigned char Byte);
 #endif

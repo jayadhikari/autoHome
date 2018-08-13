@@ -53,15 +53,21 @@ MDNSResponder mdns;
 
 extern boolean buttonFlag;
 
+boolean updateDeviceStatus=0;
+boolean restoreDevicestate=0;
+
 static int volumeLevel=0;
 static long unsigned int checkTime =0,firstCommandTime=0,sysSecTick=0,SONYCommandTime=0;
- char SSID_USER[20];
+char SSID_USER[20];
 boolean sclearnMode = 0,sendIRMusicCommandflag=0,sendIRTvCommandflag=0,sendIRCommandflag=0;
 boolean sendMusicFunctionCommandflag=0,MusicVolumeflag=0,MusicVolumeDownflag=0;
 boolean sendSONYCommands;//sony IR commands require send 3 IR commands for the same function
- char Password[20];  
+char Password[20];  
+
 DevFlags flag;
+DevFlags flagAllCommand;//this is used for checking device state when "SWITCH ALL" command is sent
 DevState state;
+
 unsigned char SSIDCount;
 unsigned char PassCount;
 _EEPaddress controlCmd[1];
@@ -178,6 +184,10 @@ void handleTime()
   Serial.print("timeFrom=");
   Serial.println(timeFrom);
 }
+
+/****
+ * This function can be called when command is sent from app or browser
+ * *****/
 void handleRf()
 {	
 	int pin = getArgValue("D");
@@ -190,6 +200,20 @@ void handleRf()
 	int on = getArgValue("on");
 	
   Serial.println("got app command..");
+  if(id == 28019 && ch == 0)
+    flagAllCommand.bits.DrawingRoomBulbFlag =1;
+  else if(id == 28019 && ch == 1)
+    flagAllCommand.bits.DrawingRoomTubeFlag =1;  
+  else if(id == 28015 && ch == 0)
+    flagAllCommand.bits.BedRoomBulbFlag=1;
+  else if(id == 28015 && ch == 1)
+    flagAllCommand.bits.BedRoomTubeFlag=1;    
+  else if(id == 28017 && ch == 2)
+    flagAllCommand.bits.fancyLightflag =1;
+
+  if(flagAllCommand.Byte)
+    updateDeviceStatus = 1;//device state changed update this   
+  
 	for(int i = 0; i < 5; i++)
 		rfWriteCode(pinNumbers[pin], t, id, (1 << (ch + 1)) | (on > 0? 1: 0));
     
@@ -198,70 +222,82 @@ void handleRf()
 
 void DrawingRoomBulb(void)
 {
-     //http://192.168.0.103/rf?D=4&t=200&id=28013&on=1&channel=0  
+     //http://192.168.0.103/rf?D=4&t=200&id=28019&on=1&channel=0  
    for(int i = 0; i < 5; i++)
       rfWriteCode(D4, 200, 28019, (1 << (0 + 1)) | (1 > 0? 1: 0));
 }
 void DrawingRoomTube(void)
 {
-     //http://192.168.0.103/rf?D=4&t=200&id=28013&on=1&channel=0  
+     //http://192.168.0.103/rf?D=4&t=200&id=28019&on=1&channel=1  
    for(int i = 0; i < 5; i++)
       rfWriteCode(D4, 200, 28019, (1 << (1 + 1)) | (1 > 0? 1: 0));
 }
 void BedRoomBulb(void)
 {
-     //http://192.168.0.103/rf?D=4&t=200&id=28013&on=1&channel=0  
+     //http://192.168.0.103/rf?D=4&t=200&id=28015&on=1&channel=0  
    for(int i = 0; i < 5; i++)
       rfWriteCode(D4, 200, 28015, (1 << (0 + 1)) | (1 > 0? 1: 0));
 }
 void BedRoomTube(void)
 {
-     //http://192.168.0.103/rf?D=4&t=200&id=28013&on=1&channel=0  
+     //http://192.168.0.103/rf?D=4&t=200&id=28015&on=1&channel=1  
    for(int i = 0; i < 5; i++)
       rfWriteCode(D4, 200, 28015, (1 << (1 + 1)) | (1 > 0? 1: 0));
 }
 void fan(void)
 {
-     //http://192.168.0.103/rf?D=4&t=200&id=28013&on=1&channel=0  
+     //http://192.168.0.103/rf?D=4&t=200&id=28015&on=1&channel=2  
    for(int i = 0; i < 5; i++)
       rfWriteCode(D4, 200, 28015, (1 << (2 + 1)) | (1 > 0? 1: 0));
 }
 void fancyLight(void)
-{
+{//http://192.168.0.103/rf?D=4&t=200&id=28017&on=1&channel=2 
     for(int i = 0; i < 5; i++)
       rfWriteCode(D4, 200, 28017, (1 << (2 + 1)) | (1 > 0? 1: 0));
 }
 void AllLights(void)
-{
+{  
   switch(deviceID)
   {
     case BULB:
           DrawingRoomBulb();
           deviceID = TUBE;
-          Serial.println("bulb..");           
+          Serial.println("bulb..");
+          flagAllCommand.bits.DrawingRoomBulbFlag =1;
+          
           break;
     case TUBE:      
           DrawingRoomTube();
           deviceID = BED_BULB;
+          flagAllCommand.bits.DrawingRoomTubeFlag =1;           
           Serial.println("tube..");
           break;
     case BED_BULB:
           BedRoomBulb();
           deviceID = BED_TUBE;
+          flagAllCommand.bits.BedRoomBulbFlag=1;
           Serial.println("bed bulb..");
           break;
     case BED_TUBE:
           BedRoomTube();
           deviceID = FANCY_LIGHT;
+          flagAllCommand.bits.BedRoomTubeFlag=1; 
           Serial.println("bed tube..");
           
           break;
     case FANCY_LIGHT:
           fancyLight();
           deviceID = NONE;
+          flagAllCommand.bits.fancyLightflag =1;
           Serial.println("fancy light..");
+
+          Serial.print("flagAllCommand.Byte = ");
+          Serial.println(flagAllCommand.Byte,HEX);          
+          updateDeviceStatus =1;
+          
           break;
   }
+  
 }
 void checkDeviceSchedule(int timeNTP)
 {//check if any device falls inside scheduling time
@@ -307,6 +343,7 @@ void setup(void)
   //irsend.begin();
   flag.Byte =0;
   state.Byte=0;
+  flagAllCommand.Byte = 0;
   Serial.begin(115200);    
   eepromSetup();  
   initTime();
@@ -317,6 +354,17 @@ void setup(void)
   setupPIRSensor();
   #endif
   //dummyRead();
+  flag.Byte = getDeviceStatus(); //read state of devices before power down
+  
+  if(flag.Byte != 0xFF && flag.Byte)
+    restoreDevicestate = 1;
+  else
+    flag.Byte = 0;
+    
+  //flag.Byte = state.Byte;  //recreate device states like before poweroff
+  Serial.print("\n\rdevice status = ");
+  Serial.println(flag.Byte, HEX);
+  
   readSavedValues(); 
 
   ssid = SSID_USER;//
@@ -391,10 +439,19 @@ void loop(void)
 
   
   checkTime = millis();
-
+    
   if((checkTime - sysSecTick)  > 2000)
   {//execute IR commands after they are recieved from alexa
-    if(flag.Byte)
+    if(restoreDevicestate)
+    {//happens just once after bootup
+       restoreState();
+       if(flag.Byte == state.Byte)
+       {//execute till all devices are put in previous state
+          restoreDevicestate = 0;
+          flag.Byte = 0;
+       }
+    }
+    else if(flag.Byte)
     {
       checkActionTobePerformed();
     }
@@ -435,5 +492,33 @@ void loop(void)
     getPassword=0;
     getCredentials();
   }
+  if(updateDeviceStatus)
+  {
+        updateDeviceStatus = 0;     
+    
+        Serial.print("\n\rflagAllCommand.Byte = ");
+        Serial.println(flagAllCommand.Byte, HEX);
+        Serial.print("\n\rstate.Byte = ");
+        Serial.println(state.Byte, HEX);
+
+        state.Byte = getNewStatus(state.Byte,flagAllCommand.Byte);
+        state.Byte = state.Byte & FAN_MASK_BYTE;//turn off fan bit, handle fan separately when required
+        flagAllCommand.Byte = 0;
+        Serial.print("\n\rnew device status = ");
+        Serial.println(state.Byte, HEX);
+        saveDeviceStatus(state.Byte); 
+       
+  }
 
 }
+
+
+
+
+
+
+
+
+
+
+
